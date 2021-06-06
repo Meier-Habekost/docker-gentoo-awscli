@@ -4,7 +4,7 @@ on:
   push:
     # Publish `master` as Docker `latest` image.
     branches:
-      - master
+      - main
   schedule:
     - cron: '0 3 * * *'
 
@@ -18,14 +18,18 @@ jobs:
   
   check_version:
     runs-on: ubuntu-latest
-    container: ghcr.io/gentoo-docker-builds/gendev:latest
+    container: gentoo/stage3:latest
     outputs:
       version: ${{ steps.version.outputs.LATEST }}
     steps:
 
+      - name: syncing latest portage tree
+        run: |
+          emerge --sync
+
       - name: fetch latest available awscli version in portage
         run: |
-          version=$(ACCEPT_KEYWORDS="~amd64" emerge -s dev-python/awscli | grep "Latest version available" | awk '{print $4}')
+          version=$(ACCEPT_KEYWORDS="~amd64" emerge -s app-admin/awscli | grep "Latest version available" | awk '{print $4}')
           echo "::set-output name=LATEST::$version"
         id: version
 
