@@ -1,9 +1,8 @@
 # ------------------- builder stage
-FROM gentoo/portage:latest as portage
 FROM gentoo/stage3-amd64:latest as builder
 
-# Copy the portage tree into the current stage
-COPY --from=portage /usr/portage /usr/portage
+# ------------------- portage tree
+COPY --from=gentoo/portage:latest /var/db/repos/gentoo /var/db/repos/gentoo
 
 # ------------------- emerge
 RUN emerge -C sandbox
