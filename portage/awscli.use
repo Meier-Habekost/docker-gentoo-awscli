@@ -1,0 +1,3 @@
+# ------------------- useflags for awscli
+
+dev-python/awscli minimal python_targets_python3_7 xml ssl

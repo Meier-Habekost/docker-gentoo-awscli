@@ -1,0 +1,82 @@
+name: Docker
+
+on:
+  push:
+    # Publish `master` as Docker `latest` image.
+    branches:
+      - master
+  schedule:
+    - cron: '0 3 * * *'
+
+  # Run tests for any PRs.
+  pull_request:
+
+env:
+  IMAGE_NAME: awscli
+
+jobs:
+  
+  check_version:
+    runs-on: ubuntu-latest
+    container: ghcr.io/gentoo-docker-builds/gendev:latest
+    outputs:
+      version: ${{ steps.version.outputs.LATEST }}
+    steps:
+
+      - name: fetch latest available awscli version in portage
+        run: |
+          version=$(ACCEPT_KEYWORDS="~amd64" emerge -s dev-python/awscli | grep "Latest version available" | awk '{print $4}')
+          echo "::set-output name=LATEST::$version"
+        id: version
+
+      - name: latest awscli version
+        run: echo 'Latest available awscli version in portage is' $LATEST
+
+  check_image_version:
+    needs: [check_version]
+    runs-on: ubuntu-latest
+    container: ghcr.io/gentoo-docker-builds/skopeo:1.1.1
+    outputs:
+      version: ${{ steps.version.outputs.UPDATE }}
+    steps:
+
+      - name: comparison
+        run: |
+          PORTAGE_VERSION=${{needs.check_version.outputs.version}} 
+          echo "$PORTAGE_VERSION"
+          if skopeo inspect docker://ghcr.io/gentoo-docker-builds/awscli:LATEST | grep "$PORTAGE_VERSION"; then
+            echo "::set-output name=UPDATE::no"
+          else
+            echo "::set-output name=UPDATE::yes"
+          fi
+        id: version
+
+  build_and_push:
+    needs: [check_version, check_image_version]
+    if: needs.check_image_version.outputs.version == 'yes'
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v2
+
+      - name: Build image
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+
+      - name: Log into GitHub Container Registry
+        run: echo "${{ secrets.CR_PAT }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push image to GitHub Container Registry
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME
+
+          # Change all uppercase to lowercase
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+
+          # Strip git ref prefix from portage run
+          VERSION=${{needs.check_version.outputs.version}}
+
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=$VERSION
+
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
+          docker push $IMAGE_ID:$VERSION
